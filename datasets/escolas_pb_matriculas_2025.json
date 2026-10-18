@@ -688,28 +688,5 @@
     "qt_mat_prof": 0,
     "qt_mat_eja": 284,
     "qt_mat_esp": 110
-  },
-  {
-    "no_entidade": "INSTITUTO DE TECNOLOGIA E DADOS DA PARAIBA",
-    "co_entidade": 99999999,
-    "no_uf": "Paraíba",
-    "sg_uf": "PB",
-    "co_uf": 25,
-    "no_municipio": "João Pessoa",
-    "co_municipio": 2507507,
-    "no_mesorregiao": "Mata Paraibana",
-    "co_mesorregiao": 4,
-    "no_microrregiao": "João Pessoa",
-    "co_microrregiao": 22,
-    "nu_ano_censo": 2025,
-    "no_regiao": "Nordeste",
-    "co_regiao": 2,
-    "qt_mat_bas": 1200,
-    "qt_mat_inf": 0,
-    "qt_mat_fund": 500,
-    "qt_mat_med": 700,
-    "qt_mat_prof": 0,
-    "qt_mat_eja": 0,
-    "qt_mat_esp": 15
   }
 ]
