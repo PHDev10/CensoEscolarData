@@ -29,6 +29,8 @@ SERIALIZACAO_USUARIO = {
 
 TIPOS_DELETES_VALIDOS = ("logico", "fisico")
 
+LIMIT_MAXIMO_PAGINA = 1000
+
 
 def _validar_tipo_delete(request_query):
     tipo = request_query.get("tipo", "logico")
@@ -37,22 +39,69 @@ def _validar_tipo_delete(request_query):
     return tipo
 
 
+def _ler_paginacao(qargs, limit_padrao=None):
+    """Retorna None quando nenhum parâmetro é enviado (retrocompatível com o
+    comportamento de lista completa) ou a tupla (page, limit) já validada.
+    Lança ValueError para parâmetros inválidos (a rota responde 400).
+    """
+    raw_page = qargs.get("page")
+    raw_limit = qargs.get("limit")
+    if raw_page is None and raw_limit is None:
+        return None
+
+    page, limit = 1, limit_padrao
+    try:
+        if raw_page is not None:
+            page = int(raw_page)
+        if raw_limit is not None:
+            limit = int(raw_limit)
+    except (TypeError, ValueError):
+        raise ValueError("Os parâmetros 'page' e 'limit' devem ser números inteiros")
+
+    if page < 1 or (limit is not None and limit < 1):
+        raise ValueError("Os parâmetros 'page' e 'limit' devem ser números inteiros positivos")
+
+    if limit is not None:
+        limit = min(limit, LIMIT_MAXIMO_PAGINA)
+    return page, limit
+
+
+def _resposta_lista(registros, serializacao, total=None):
+    """Serializa uma lista com dump(many=True) e expõe X-Total-Count quando houver."""
+    resposta = jsonify(dump(registros, many=True, **serializacao))
+    if total is not None:
+        resposta.headers["X-Total-Count"] = str(total)
+    return resposta, 200
+
+
+@app.route("/instituicoesensino", methods=["GET"])
 @app.route("/instituicaoensino", methods=["GET"])
 def get_instituicoes():
     cod_busca = request.args.get("codigo")
-    if not cod_busca:
+    if cod_busca:
+        if not cod_busca.isdigit():
+            return jsonify({"erro": "O parâmetro 'codigo' deve ser um número inteiro"}), 400
+        instituicao = repo_instituicoes.obter(int(cod_busca))
+        if instituicao is None:
+            return jsonify({"erro": "Instituição de ensino não encontrada"}), 404
+        return jsonify(dump(instituicao, **SERIALIZACAO_IE)), 200
+
+    try:
+        paginacao = _ler_paginacao(request.args, limit_padrao=100)
+    except ValueError as erro:
+        return jsonify({"erro": str(erro)}), 400
+
+    if paginacao is None:
         registros = repo_instituicoes.listar()
-        return jsonify(dump(registros, many=True, **SERIALIZACAO_IE)), 200
+        return _resposta_lista(registros, SERIALIZACAO_IE)
 
-    if not cod_busca.isdigit():
-        return jsonify({"erro": "O parâmetro 'codigo' deve ser um número inteiro"}), 400
-
-    instituicao = repo_instituicoes.obter(int(cod_busca))
-    if instituicao is None:
-        return jsonify({"erro": "Instituição de ensino não encontrada"}), 404
-    return jsonify(dump(instituicao, **SERIALIZACAO_IE)), 200
+    page, limit = paginacao
+    total = repo_instituicoes.contar_ativos()
+    registros = repo_instituicoes.listar(page=page, limit=limit)
+    return _resposta_lista(registros, SERIALIZACAO_IE, total=total)
 
 
+@app.route("/instituicoesensino/<int:co_entidade>", methods=["GET"])
 @app.route("/instituicaoensino/<int:co_entidade>", methods=["GET"])
 def get_instituicao_por_id(co_entidade):
     instituicao = repo_instituicoes.obter(co_entidade)
@@ -61,6 +110,7 @@ def get_instituicao_por_id(co_entidade):
     return jsonify(dump(instituicao, **SERIALIZACAO_IE)), 200
 
 
+@app.route("/instituicoesensino", methods=["POST"])
 @app.route("/instituicaoensino", methods=["POST"])
 def criar_instituicao():
     corpo = request.get_json(silent=True)
@@ -103,6 +153,7 @@ def criar_instituicao():
     return jsonify(dump(criada, **SERIALIZACAO_IE)), 201
 
 
+@app.route("/instituicoesensino/<int:co_entidade>", methods=["PUT"])
 @app.route("/instituicaoensino/<int:co_entidade>", methods=["PUT"])
 def atualizar_instituicao(co_entidade):
     corpo = request.get_json(silent=True)
@@ -127,6 +178,7 @@ def atualizar_instituicao(co_entidade):
     return jsonify(dump(atualizada, **SERIALIZACAO_IE)), 200
 
 
+@app.route("/instituicoesensino/<int:co_entidade>", methods=["DELETE"])
 @app.route("/instituicaoensino/<int:co_entidade>", methods=["DELETE"])
 def remover_instituicao(co_entidade):
     tipo = _validar_tipo_delete(request.args)
@@ -163,8 +215,19 @@ def remover_instituicao(co_entidade):
 
 @app.route("/usuarios", methods=["GET"])
 def get_usuarios():
-    registros = repo_usuarios.listar()
-    return jsonify(dump(registros, many=True, **SERIALIZACAO_USUARIO)), 200
+    try:
+        paginacao = _ler_paginacao(request.args, limit_padrao=None)
+    except ValueError as erro:
+        return ((jsonify({"erro": str(erro)})), 400)
+
+    if paginacao is None:
+        registros = repo_usuarios.listar()
+        return _resposta_lista(registros, SERIALIZACAO_USUARIO)
+
+    page, limit = paginacao
+    total = repo_usuarios.contar_ativos()
+    registros = repo_usuarios.listar(page=page, limit=limit)
+    return _resposta_lista(registros, SERIALIZACAO_USUARIO, total=total)
 
 
 @app.route("/usuarios/<int:id_usuario>", methods=["GET"])

@@ -1,0 +1,1 @@
+Link para o projeto de extração de dados do Censo Escolar 2025, nas regiões Nordeste e Sudeste: https://github.com/PHDev10/CensoEscolarApiRegional
