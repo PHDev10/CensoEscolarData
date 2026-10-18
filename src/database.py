@@ -10,63 +10,48 @@ DB_PATH = os.path.join(DATA_DIR, "censo_escolar.db")
 
 logger = logging.getLogger("censo_escolar")
 
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS instituicoes (
-    co_entidade    INTEGER PRIMARY KEY,
-    no_entidade    TEXT NOT NULL,
-    no_uf          TEXT,
-    sg_uf          TEXT,
-    co_uf          INTEGER,
-    no_municipio   TEXT,
-    co_municipio   INTEGER,
-    no_mesorregiao TEXT,
-    co_mesorregiao INTEGER,
-    no_microrregiao TEXT,
-    co_microrregiao INTEGER,
-    nu_ano_censo   INTEGER,
-    no_regiao      TEXT,
-    co_regiao      INTEGER,
-    qt_mat_bas     INTEGER,
-    qt_mat_inf     INTEGER,
-    qt_mat_fund    INTEGER,
-    qt_mat_med     INTEGER,
-    qt_mat_prof    INTEGER,
-    qt_mat_eja     INTEGER,
-    qt_mat_esp     INTEGER,
-    ativo          INTEGER NOT NULL DEFAULT 1
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    no_entidade   TEXT NOT NULL,
+    co_entidade   INTEGER NOT NULL,
+    no_uf         TEXT,
+    sg_uf         TEXT,
+    co_uf         INTEGER,
+    no_municipio  TEXT,
+    co_municipio  INTEGER,
+    nu_ano_censo  INTEGER,
+    qt_mat_bas    INTEGER,
+    qt_mat_inf    INTEGER,
+    qt_mat_fund   INTEGER,
+    qt_mat_med    INTEGER,
+    qt_mat_prof   INTEGER,
+    qt_mat_eja    INTEGER,
+    qt_mat_esp    INTEGER,
+    ativo         INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS usuarios (
-    id            INTEGER PRIMARY KEY,
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
     nome          TEXT NOT NULL,
     email         TEXT NOT NULL,
     perfil        TEXT,
     ativo_usuario INTEGER NOT NULL DEFAULT 1,
     ativo         INTEGER NOT NULL DEFAULT 1
 );
+
+CREATE INDEX IF NOT EXISTS idx_instituicoes_co_entidade ON instituicoes (co_entidade, ativo);
+CREATE INDEX IF NOT EXISTS idx_instituicoes_listagem ON instituicoes (ativo, co_entidade);
+CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios (email, ativo);
+CREATE INDEX IF NOT EXISTS idx_usuarios_listagem ON usuarios (ativo, id);
 """
 
 CAMPOS_INSTITUICAO = (
-    "no_entidade",
-    "no_uf",
-    "sg_uf",
-    "co_uf",
-    "no_municipio",
-    "co_municipio",
-    "no_mesorregiao",
-    "co_mesorregiao",
-    "no_microrregiao",
-    "co_microrregiao",
-    "nu_ano_censo",
-    "no_regiao",
-    "co_regiao",
-    "qt_mat_bas",
-    "qt_mat_inf",
-    "qt_mat_fund",
-    "qt_mat_med",
-    "qt_mat_prof",
-    "qt_mat_eja",
-    "qt_mat_esp",
+    "no_entidade", "no_uf", "sg_uf", "co_uf", "no_municipio", "co_municipio",
+    "no_mesorregiao", "co_mesorregiao", "no_microrregiao", "co_microrregiao",
+    "nu_ano_censo", "no_regiao", "co_regiao", "qt_mat_bas", "qt_mat_inf",
+    "qt_mat_fund", "qt_mat_med", "qt_mat_prof", "qt_mat_eja", "qt_mat_esp",
 )
 
 
@@ -77,21 +62,30 @@ def obter_conexao():
     return conexao
 
 
+def colunas_da_tabela(conexao, tabela):
+    linhas = conexao.execute(f"PRAGMA table_info({tabela})").fetchall()
+    return {linha["name"] for linha in linhas}
+
+
 def _popular_instituicoes(conexao):
     total = conexao.execute("SELECT COUNT(*) FROM instituicoes").fetchone()[0]
     if total > 0:
         return
+    existentes = colunas_da_tabela(conexao, "instituicoes")
+    colunas = tuple(
+        ("co_entidade",) + tuple(c for c in CAMPOS_INSTITUICAO if c in existentes)
+    )
     registros = carregar_json(CAMINHO_ARQUIVO_IE)
-    colunas = ("co_entidade",) + CAMPOS_INSTITUICAO
-    parametros = [tuple(ie.get(campo) for campo in colunas) for ie in registros]
+    parametros = [
+        tuple(ie.get(campo) for campo in colunas)
+        for ie in registros
+    ]
     conexao.executemany(
         f"INSERT INTO instituicoes ({', '.join(colunas)}) "
         f"VALUES ({', '.join('?' * len(colunas))})",
         parametros,
     )
-    logger.info(
-        "Carga inicial: %d instituições inseridas em 'instituicoes'", len(parametros)
-    )
+    logger.info("Carga inicial: %d instituições inseridas em 'instituicoes'", len(parametros))
 
 
 def _popular_usuarios(conexao):
@@ -118,7 +112,7 @@ def _popular_usuarios(conexao):
 
 
 def inicializar_banco():
-    """Cria o arquivo, as tabelas e povoa a base se ela estiver vazia (idempotente)."""
+    """Cria o arquivo, as tabelas, os índices e povoa a base se ela estiver vazia (idempotente)."""
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
         conexao = obter_conexao()

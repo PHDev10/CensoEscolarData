@@ -13,6 +13,7 @@ class RepositorioBase:
 
     tabela = ""
     pk = ""
+    ordem_padrao = ""
     renomear = {}
 
     def _executar(self, sql, parametros=(), fetch="all"):
@@ -53,11 +54,24 @@ class RepositorioBase:
                 campos[coluna] = valor
         return campos
 
-    # ---------- LEITURA (get by all / get by id) ----------
 
-    def listar(self):
-        """get by all: retorna apenas registros ativos (filtro WHERE ativo = 1)."""
-        return self._executar(f"SELECT * FROM {self.tabela} WHERE ativo = 1")
+    def listar(self, page=None, limit=None):
+        """get by all: registros ativos (WHERE ativo = 1) com paginação opcional."""
+        sql = f"SELECT * FROM {self.tabela} WHERE ativo = 1"
+        if self.ordem_padrao:
+            sql += f" ORDER BY {self.ordem_padrao}"
+        if page is not None and limit is not None:
+            offset = (page - 1) * limit
+            sql += f" LIMIT ? OFFSET ?"
+            return self._executar(sql, (limit, offset))
+        return self._executar(sql)
+
+    def contar_ativos(self):
+        """Total de registros ativos (usado no header X-Total-Count da paginação)."""
+        linha = self._executar(
+            f"SELECT COUNT(*) AS total FROM {self.tabela} WHERE ativo = 1", fetch="one"
+        )
+        return linha["total"] if linha else 0
 
     def obter(self, id_valor):
         """get by id: retorna o registro ativo com a PK informada (ou None)."""
@@ -116,9 +130,8 @@ class RepositorioBase:
 
     def remover(self, id_valor, tipo="logico"):
         """Remove um registro por exclusão lógica (ativo = 0) ou física (DELETE).
-
         Retorna a linha removida (pré-operação) ou None se não houver registro
-        compatível (inexistente ou, no delete lógico, já inativo).
+        compatível
         """
         existente = self._executar(
             f"SELECT * FROM {self.tabela} WHERE {self.pk} = ?", (id_valor,), fetch="one"
@@ -146,17 +159,19 @@ class RepositorioBase:
 
 
 class InstituicaoRepository(RepositorioBase):
-    """Repository da tabela 'instituicoes' (PK natural: co_entidade)."""
+    """Repository da tabela 'instituicoes'"""
 
     tabela = "instituicoes"
     pk = "co_entidade"
+    ordem_padrao = "co_entidade"
 
 
 class UsuarioRepository(RepositorioBase):
-    """Repository da tabela 'usuarios' (PK: id)."""
+    """Repository da tabela 'usuarios'"""
 
     tabela = "usuarios"
     pk = "id"
+    ordem_padrao = "id"
     renomear = {"ativo": "ativo_usuario"}
 
     proximo_id_sql = "SELECT COALESCE(MAX(id), 0) + 1 AS proximo FROM usuarios"
@@ -166,7 +181,7 @@ class UsuarioRepository(RepositorioBase):
         return linha["proximo"]
 
     def id_ja_utilizado(self, id_valor):
-        """Verifica a PK entre TODOS os registros (ativos e inativos)."""
+        """Verifica a PK entre TODOS os registros (ativos e inativos)"""
         return (
             self._executar(
                 f"SELECT 1 FROM {self.tabela} WHERE {self.pk} = ?",
