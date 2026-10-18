@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1,
+    "nome": "Ana Souza",
+    "email": "ana.souza@example.com",
+    "perfil": "admin",
+    "ativo": false
+  },
+  {
+    "id": 2,
+    "nome": "Bruno Lima",
+    "email": "bruno.lima@example.com",
+    "perfil": "pesquisador",
+    "ativo": true
+  },
+  {
+    "id": 3,
+    "nome": "Carla Dias",
+    "email": "carla.dias@example.com",
+    "perfil": "professor",
+    "ativo": false
+  }
+]
