@@ -1,4 +1,3 @@
-import logging
 import os
 import sqlite3
 
@@ -7,12 +6,8 @@ from helpers.environment import (
     CAMINHO_JSON_USUARIOS,
     DB_NAME,
 )
-from storage import carregar_json
-
-DB_PATH = DB_NAME
-
-logger = logging.getLogger("censo_escolar")
-
+from helpers.logger import logger
+from helpers.storage import carregar_json
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS instituicoes (
@@ -76,7 +71,7 @@ CAMPOS_INSTITUICAO = (
 
 def obter_conexao():
     """Retorna uma nova conexão SQLite com linhas acessíveis por nome de coluna."""
-    conexao = sqlite3.connect(DB_PATH)
+    conexao = sqlite3.connect(DB_NAME)
     conexao.row_factory = sqlite3.Row
     return conexao
 
@@ -132,7 +127,7 @@ def _popular_usuarios(conexao):
 def inicializar_banco():
     """Cria o arquivo, as tabelas, os índices e povoa a base se ela estiver vazia"""
     try:
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        os.makedirs(os.path.dirname(DB_NAME), exist_ok=True)
         conexao = obter_conexao()
         try:
             conexao.executescript(SCHEMA)
@@ -142,6 +137,6 @@ def inicializar_banco():
         finally:
             conexao.close()
     except (OSError, sqlite3.Error, ValueError):
-        logger.exception("Falha ao inicializar o banco de dados em %s", DB_PATH)
+        logger.exception("Falha ao inicializar o banco de dados em %s", DB_NAME)
         raise
-    return DB_PATH
+    return DB_NAME
