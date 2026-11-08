@@ -31,7 +31,6 @@ def _booleano(chave, padrao):
 
 
 def _caminho(chave, padrao):
-    """Caminhos relativos no .env são resolvidos a partir da raiz do projeto."""
     caminho = Path(_texto(chave, padrao))
     return str(caminho if caminho.is_absolute() else RAIZ_PROJETO / caminho)
 

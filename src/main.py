@@ -3,18 +3,25 @@ import sqlite3
 from flask import Flask, jsonify, request
 
 from helpers.database import inicializar_banco
-from helpers.environment import FLASK_DEBUG, FLASK_PORT, LIMIT_MAXIMO_PAGINA
+from helpers.environment import FLASK_DEBUG, FLASK_PORT
 from helpers.logger import logger
-from repositories.instituicao_ensino_repository import InstituicaoEnsinoRepository
-from repositories.usuario_repository import UsuarioRepository
 from serializers import dump
+from services.excecoes import (
+    ConflitoError,
+    ErroInternoError,
+    NaoEncontradoError,
+    ServicoError,
+    ValidacaoError,
+)
+from services.instituicao_ensino_service import InstituicaoEnsinoService
+from services.usuario_service import UsuarioService
 
 inicializar_banco()
 
 app = Flask(__name__)
 
-repo_instituicoes = InstituicaoEnsinoRepository()
-repo_usuarios = UsuarioRepository()
+service_instituicoes = InstituicaoEnsinoService()
+service_usuarios = UsuarioService()
 
 SERIALIZACAO_IE = {"booleanos": ("ativo",), "renomear": None}
 SERIALIZACAO_USUARIO = {
@@ -22,40 +29,12 @@ SERIALIZACAO_USUARIO = {
     "renomear": {"ativo_usuario": "ativo"},
 }
 
-TIPOS_DELETES_VALIDOS = ("logico", "fisico")
-
-
-def _validar_tipo_delete(request_query):
-    tipo = request_query.get("tipo", "logico")
-    if tipo not in TIPOS_DELETES_VALIDOS:
-        return None
-    return tipo
-
-
-def _ler_paginacao(qargs, limit_padrao=None):
-    """Retorna None quando nenhum parâmetro é enviado  ou a tupla já validada."""
-    raw_page = qargs.get("page")
-    raw_limit = qargs.get("limit")
-    if raw_page is None and raw_limit is None:
-        return None
-
-    page, limit = 1, limit_padrao
-    try:
-        if raw_page is not None:
-            page = int(raw_page)
-        if raw_limit is not None:
-            limit = int(raw_limit)
-    except (TypeError, ValueError):
-        raise ValueError("Os parâmetros 'page' e 'limit' devem ser números inteiros")
-
-    if page < 1 or (limit is not None and limit < 1):
-        raise ValueError(
-            "Os parâmetros 'page' e 'limit' devem ser números inteiros positivos"
-        )
-
-    if limit is not None:
-        limit = min(limit, LIMIT_MAXIMO_PAGINA)
-    return page, limit
+STATUS_POR_ERRO = {
+    ValidacaoError: 400,
+    NaoEncontradoError: 404,
+    ConflitoError: 409,
+    ErroInternoError: 500,
+}
 
 
 def _resposta_lista(registros, serializacao, total=None):
@@ -69,137 +48,49 @@ def _resposta_lista(registros, serializacao, total=None):
 @app.route("/instituicoesensino", methods=["GET"])
 @app.route("/instituicaoensino", methods=["GET"])
 def get_instituicoes():
-    cod_busca = request.args.get("codigo")
-    if cod_busca:
-        if not cod_busca.isdigit():
-            return (
-                jsonify({"erro": "O parâmetro 'codigo' deve ser um número inteiro"}),
-                400,
-            )
-        instituicao = repo_instituicoes.obter(int(cod_busca))
-        if instituicao is None:
-            return jsonify({"erro": "Instituição de ensino não encontrada"}), 404
+    codigo = request.args.get("codigo")
+    if codigo:
+        instituicao = service_instituicoes.buscar_por_codigo(codigo)
         return jsonify(dump(instituicao, **SERIALIZACAO_IE)), 200
 
-    try:
-        paginacao = _ler_paginacao(request.args, limit_padrao=100)
-    except ValueError as erro:
-        return jsonify({"erro": str(erro)}), 400
-
-    if paginacao is None:
-        registros = repo_instituicoes.listar()
-        return _resposta_lista(registros, SERIALIZACAO_IE)
-
-    page, limit = paginacao
-    total = repo_instituicoes.contar_ativos()
-    registros = repo_instituicoes.listar(page=page, limit=limit)
+    registros, total = service_instituicoes.listar(
+        request.args.get("page"), request.args.get("limit")
+    )
     return _resposta_lista(registros, SERIALIZACAO_IE, total=total)
 
 
 @app.route("/instituicoesensino/<int:co_entidade>", methods=["GET"])
 @app.route("/instituicaoensino/<int:co_entidade>", methods=["GET"])
 def get_instituicao_por_id(co_entidade):
-    instituicao = repo_instituicoes.obter(co_entidade)
-    if instituicao is None:
-        return jsonify({"erro": "Instituição de ensino não encontrada"}), 404
+    instituicao = service_instituicoes.obter(co_entidade)
     return jsonify(dump(instituicao, **SERIALIZACAO_IE)), 200
 
 
 @app.route("/instituicoesensino", methods=["POST"])
 @app.route("/instituicaoensino", methods=["POST"])
 def criar_instituicao():
-    corpo = request.get_json(silent=True)
-    if not isinstance(corpo, dict) or not corpo:
-        return (
-            jsonify({"erro": "Corpo da requisição inválido: envie um JSON válido"}),
-            400,
-        )
-
-    co_entidade = corpo.get("co_entidade")
-    if (
-        co_entidade is None
-        or isinstance(co_entidade, bool)
-        or not isinstance(co_entidade, int)
-    ):
-        return (
-            jsonify(
-                {
-                    "erro": "O campo 'co_entidade' é obrigatório e deve ser um número inteiro"
-                }
-            ),
-            400,
-        )
-    if not corpo.get("no_entidade"):
-        return jsonify({"erro": "O campo 'no_entidade' é obrigatório"}), 400
-
-    try:
-        if repo_instituicoes.existe_ativo("co_entidade", co_entidade):
-            return (
-                jsonify(
-                    {"erro": f"Já existe uma instituição com co_entidade {co_entidade}"}
-                ),
-                409,
-            )
-        criada = repo_instituicoes.inserir(corpo)
-    except sqlite3.Error:
-        logger.exception("Erro ao inserir instituição %s", co_entidade)
-        return jsonify({"erro": "Erro interno ao salvar a instituição"}), 500
-
+    criada = service_instituicoes.criar(request.get_json(silent=True))
     return jsonify(dump(criada, **SERIALIZACAO_IE)), 201
 
 
 @app.route("/instituicoesensino/<int:co_entidade>", methods=["PUT"])
 @app.route("/instituicaoensino/<int:co_entidade>", methods=["PUT"])
 def atualizar_instituicao(co_entidade):
-    corpo = request.get_json(silent=True)
-    if not isinstance(corpo, dict) or not corpo:
-        return (
-            jsonify({"erro": "Corpo da requisição inválido: envie um JSON válido"}),
-            400,
-        )
-    if "co_entidade" in corpo and corpo["co_entidade"] != co_entidade:
-        return (
-            jsonify({"erro": "Não é permitido alterar o 'co_entidade' da instituição"}),
-            400,
-        )
-
-    try:
-        atualizada = repo_instituicoes.atualizar(co_entidade, corpo)
-    except sqlite3.Error:
-        logger.exception("Erro ao atualizar instituição %s", co_entidade)
-        return jsonify({"erro": "Erro interno ao atualizar a instituição"}), 500
-    if atualizada is None:
-        return jsonify({"erro": "Instituição de ensino não encontrada"}), 404
+    atualizada = service_instituicoes.atualizar(
+        co_entidade, request.get_json(silent=True)
+    )
     return jsonify(dump(atualizada, **SERIALIZACAO_IE)), 200
 
 
 @app.route("/instituicoesensino/<int:co_entidade>", methods=["DELETE"])
 @app.route("/instituicaoensino/<int:co_entidade>", methods=["DELETE"])
 def remover_instituicao(co_entidade):
-    tipo = _validar_tipo_delete(request.args)
-    if tipo is None:
-        return (
-            jsonify({"erro": "O parâmetro 'tipo' deve ser 'logico' ou 'fisico'"}),
-            400,
-        )
-
-    try:
-        removida = repo_instituicoes.remover(co_entidade, tipo=tipo)
-    except sqlite3.Error:
-        logger.exception("Erro ao remover instituição %s", co_entidade)
-        return jsonify({"erro": "Erro interno ao remover a instituição"}), 500
-    if removida is None:
-        return jsonify({"erro": "Instituição de ensino não encontrada"}), 404
-
-    logger.info("Instituição %s removida (delete %s)", co_entidade, tipo)
+    tipo = request.args.get("tipo", "logico")
+    removida, mensagem = service_instituicoes.remover(co_entidade, tipo)
     return (
         jsonify(
             {
-                "mensagem": (
-                    "Instituição excluída logicamente (ativo = 0)"
-                    if tipo == "logico"
-                    else "Instituição excluída fisicamente do banco de dados"
-                ),
+                "mensagem": mensagem,
                 "tipo": tipo,
                 "instituicao": dump(removida, **SERIALIZACAO_IE),
             }
@@ -210,124 +101,49 @@ def remover_instituicao(co_entidade):
 
 @app.route("/usuarios", methods=["GET"])
 def get_usuarios():
-    try:
-        paginacao = _ler_paginacao(request.args, limit_padrao=None)
-    except ValueError as erro:
-        return ((jsonify({"erro": str(erro)})), 400)
-
-    if paginacao is None:
-        registros = repo_usuarios.listar()
-        return _resposta_lista(registros, SERIALIZACAO_USUARIO)
-
-    page, limit = paginacao
-    total = repo_usuarios.contar_ativos()
-    registros = repo_usuarios.listar(page=page, limit=limit)
+    registros, total = service_usuarios.listar(
+        request.args.get("page"), request.args.get("limit")
+    )
     return _resposta_lista(registros, SERIALIZACAO_USUARIO, total=total)
 
 
 @app.route("/usuarios/<int:id_usuario>", methods=["GET"])
 def get_usuario_por_id(id_usuario):
-    usuario = repo_usuarios.obter(id_usuario)
-    if usuario is None:
-        return jsonify({"erro": "Usuário não encontrado"}), 404
+    usuario = service_usuarios.obter(id_usuario)
     return jsonify(dump(usuario, **SERIALIZACAO_USUARIO)), 200
 
 
 @app.route("/usuarios", methods=["POST"])
 def criar_usuario():
-    corpo = request.get_json(silent=True)
-    if not isinstance(corpo, dict) or not corpo:
-        return (
-            jsonify({"erro": "Corpo da requisição inválido: envie um JSON válido"}),
-            400,
-        )
-    if not corpo.get("nome"):
-        return jsonify({"erro": "O campo 'nome' é obrigatório"}), 400
-    if not corpo.get("email"):
-        return jsonify({"erro": "O campo 'email' é obrigatório"}), 400
-
-    try:
-        if repo_usuarios.existe_email(corpo["email"]):
-            return jsonify({"erro": "Já existe um usuário com este e-mail"}), 409
-
-        id_usuario = corpo.get("id")
-        if id_usuario is None:
-            corpo["id"] = repo_usuarios.proximo_id()
-        elif (
-            isinstance(id_usuario, bool)
-            or not isinstance(id_usuario, int)
-            or repo_usuarios.id_ja_utilizado(id_usuario)
-        ):
-            return (
-                jsonify(
-                    {
-                        "erro": "O campo 'id' deve ser um número inteiro ainda não utilizado"
-                    }
-                ),
-                400,
-            )
-
-        criado = repo_usuarios.inserir(corpo)
-    except sqlite3.Error:
-        logger.exception("Erro ao inserir usuário")
-        return jsonify({"erro": "Erro interno ao salvar o usuário"}), 500
-
+    criado = service_usuarios.criar(request.get_json(silent=True))
     return jsonify(dump(criado, **SERIALIZACAO_USUARIO)), 201
 
 
 @app.route("/usuarios/<int:id_usuario>", methods=["PUT"])
 def atualizar_usuario(id_usuario):
-    corpo = request.get_json(silent=True)
-    if not isinstance(corpo, dict) or not corpo:
-        return (
-            jsonify({"erro": "Corpo da requisição inválido: envie um JSON válido"}),
-            400,
-        )
-    if "id" in corpo and corpo["id"] != id_usuario:
-        return jsonify({"erro": "Não é permitido alterar o 'id' do usuário"}), 400
-
-    try:
-        atualizado = repo_usuarios.atualizar(id_usuario, corpo)
-    except sqlite3.Error:
-        logger.exception("Erro ao atualizar usuário %s", id_usuario)
-        return jsonify({"erro": "Erro interno ao atualizar o usuário"}), 500
-    if atualizado is None:
-        return jsonify({"erro": "Usuário não encontrado"}), 404
+    atualizado = service_usuarios.atualizar(id_usuario, request.get_json(silent=True))
     return jsonify(dump(atualizado, **SERIALIZACAO_USUARIO)), 200
 
 
 @app.route("/usuarios/<int:id_usuario>", methods=["DELETE"])
 def remover_usuario(id_usuario):
-    tipo = _validar_tipo_delete(request.args)
-    if tipo is None:
-        return (
-            jsonify({"erro": "O parâmetro 'tipo' deve ser 'logico' ou 'fisico'"}),
-            400,
-        )
-
-    try:
-        removido = repo_usuarios.remover(id_usuario, tipo=tipo)
-    except sqlite3.Error:
-        logger.exception("Erro ao remover usuário %s", id_usuario)
-        return jsonify({"erro": "Erro interno ao remover o usuário"}), 500
-    if removido is None:
-        return jsonify({"erro": "Usuário não encontrado"}), 404
-
-    logger.info("Usuário %s removido (delete %s)", id_usuario, tipo)
+    tipo = request.args.get("tipo", "logico")
+    removido, mensagem = service_usuarios.remover(id_usuario, tipo)
     return (
         jsonify(
             {
-                "mensagem": (
-                    "Usuário excluído logicamente (ativo = 0)"
-                    if tipo == "logico"
-                    else "Usuário excluído fisicamente do banco de dados"
-                ),
+                "mensagem": mensagem,
                 "tipo": tipo,
                 "usuario": dump(removido, **SERIALIZACAO_USUARIO),
             }
         ),
         200,
     )
+
+
+@app.errorhandler(ServicoError)
+def erro_de_servico(erro):
+    return jsonify({"erro": str(erro)}), STATUS_POR_ERRO[type(erro)]
 
 
 @app.errorhandler(404)
