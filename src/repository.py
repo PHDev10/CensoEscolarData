@@ -1,9 +1,7 @@
-import logging
 import sqlite3
 
-from database import obter_conexao
-
-logger = logging.getLogger("censo_escolar")
+from helpers.database import obter_conexao
+from helpers.logger import logger
 
 CAMPOS_IGNORADOS_ESCRITA = ("ativo",)
 
@@ -44,7 +42,6 @@ class RepositorioBase:
             conexao.close()
 
     def _mapear_campos(self, corpo, colunas, ignorar_pk=True):
-        """Filtra o corpo da requisição para chaves que são colunas reais da tabela."""
         campos = {}
         for chave, valor in corpo.items():
             coluna = self.renomear.get(chave, chave)

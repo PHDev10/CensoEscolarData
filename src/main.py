@@ -1,19 +1,12 @@
-import logging
-
 import sqlite3
 
 from flask import Flask, jsonify, request
 
-from database import inicializar_banco
+from helpers.database import inicializar_banco
 from helpers.environment import FLASK_DEBUG, FLASK_PORT, LIMIT_MAXIMO_PAGINA
+from helpers.logger import logger
 from repository import InstituicaoRepository, UsuarioRepository
 from serializers import dump
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
-logger = logging.getLogger("censo_escolar")
 
 inicializar_banco()
 
