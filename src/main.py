@@ -5,14 +5,15 @@ from flask import Flask, jsonify, request
 from helpers.database import inicializar_banco
 from helpers.environment import FLASK_DEBUG, FLASK_PORT, LIMIT_MAXIMO_PAGINA
 from helpers.logger import logger
-from repository import InstituicaoRepository, UsuarioRepository
+from repositories.instituicao_ensino_repository import InstituicaoEnsinoRepository
+from repositories.usuario_repository import UsuarioRepository
 from serializers import dump
 
 inicializar_banco()
 
 app = Flask(__name__)
 
-repo_instituicoes = InstituicaoRepository()
+repo_instituicoes = InstituicaoEnsinoRepository()
 repo_usuarios = UsuarioRepository()
 
 SERIALIZACAO_IE = {"booleanos": ("ativo",), "renomear": None}

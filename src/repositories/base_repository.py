@@ -6,7 +6,7 @@ from helpers.logger import logger
 CAMPOS_IGNORADOS_ESCRITA = ("ativo",)
 
 
-class RepositorioBase:
+class BaseRepository:
     """Operações CRUD + exclusão lógica e física genéricas para uma tabela."""
 
     tabela = ""
@@ -142,35 +142,3 @@ class RepositorioBase:
             )
             logger.info("Exclusão FÍSICA em '%s' (chave: %s)", self.tabela, id_valor)
         return existente
-
-
-class InstituicaoRepository(RepositorioBase):
-    tabela = "instituicoes"
-    pk = "co_entidade"
-    ordem_padrao = "co_entidade"
-
-
-class UsuarioRepository(RepositorioBase):
-    tabela = "usuarios"
-    pk = "id"
-    ordem_padrao = "id"
-    renomear = {"ativo": "ativo_usuario"}
-
-    proximo_id_sql = "SELECT COALESCE(MAX(id), 0) + 1 AS proximo FROM usuarios"
-
-    def proximo_id(self):
-        linha = self._executar(self.proximo_id_sql, fetch="one")
-        return linha["proximo"]
-
-    def id_ja_utilizado(self, id_valor):
-        return (
-            self._executar(
-                f"SELECT 1 FROM {self.tabela} WHERE {self.pk} = ?",
-                (id_valor,),
-                fetch="one",
-            )
-            is not None
-        )
-
-    def existe_email(self, email):
-        return self.existe_ativo("email", email)
