@@ -2,11 +2,14 @@ import logging
 import os
 import sqlite3
 
-from storage import CAMINHO_ARQUIVO_IE, CAMINHO_ARQUIVO_USUARIOS, carregar_json
+from helpers.environment import (
+    CAMINHO_JSON_INSTITUICOES,
+    CAMINHO_JSON_USUARIOS,
+    DB_NAME,
+)
+from storage import carregar_json
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "datasets")
-DB_PATH = os.path.join(DATA_DIR, "censo_escolar.db")
+DB_PATH = DB_NAME
 
 logger = logging.getLogger("censo_escolar")
 
@@ -48,10 +51,26 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_listagem ON usuarios (ativo, id);
 """
 
 CAMPOS_INSTITUICAO = (
-    "no_entidade", "no_uf", "sg_uf", "co_uf", "no_municipio", "co_municipio",
-    "no_mesorregiao", "co_mesorregiao", "no_microrregiao", "co_microrregiao",
-    "nu_ano_censo", "no_regiao", "co_regiao", "qt_mat_bas", "qt_mat_inf",
-    "qt_mat_fund", "qt_mat_med", "qt_mat_prof", "qt_mat_eja", "qt_mat_esp",
+    "no_entidade",
+    "no_uf",
+    "sg_uf",
+    "co_uf",
+    "no_municipio",
+    "co_municipio",
+    "no_mesorregiao",
+    "co_mesorregiao",
+    "no_microrregiao",
+    "co_microrregiao",
+    "nu_ano_censo",
+    "no_regiao",
+    "co_regiao",
+    "qt_mat_bas",
+    "qt_mat_inf",
+    "qt_mat_fund",
+    "qt_mat_med",
+    "qt_mat_prof",
+    "qt_mat_eja",
+    "qt_mat_esp",
 )
 
 
@@ -75,24 +94,23 @@ def _popular_instituicoes(conexao):
     colunas = tuple(
         ("co_entidade",) + tuple(c for c in CAMPOS_INSTITUICAO if c in existentes)
     )
-    registros = carregar_json(CAMINHO_ARQUIVO_IE)
-    parametros = [
-        tuple(ie.get(campo) for campo in colunas)
-        for ie in registros
-    ]
+    registros = carregar_json(CAMINHO_JSON_INSTITUICOES)
+    parametros = [tuple(ie.get(campo) for campo in colunas) for ie in registros]
     conexao.executemany(
         f"INSERT INTO instituicoes ({', '.join(colunas)}) "
         f"VALUES ({', '.join('?' * len(colunas))})",
         parametros,
     )
-    logger.info("Carga inicial: %d instituições inseridas em 'instituicoes'", len(parametros))
+    logger.info(
+        "Carga inicial: %d instituições inseridas em 'instituicoes'", len(parametros)
+    )
 
 
 def _popular_usuarios(conexao):
     total = conexao.execute("SELECT COUNT(*) FROM usuarios").fetchone()[0]
     if total > 0:
         return
-    registros = carregar_json(CAMINHO_ARQUIVO_USUARIOS)
+    registros = carregar_json(CAMINHO_JSON_USUARIOS)
     parametros = [
         (
             usuario["id"],
@@ -112,9 +130,9 @@ def _popular_usuarios(conexao):
 
 
 def inicializar_banco():
-    """Cria o arquivo, as tabelas, os índices e povoa a base se ela estiver vazia (idempotente)."""
+    """Cria o arquivo, as tabelas, os índices e povoa a base se ela estiver vazia"""
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         conexao = obter_conexao()
         try:
             conexao.executescript(SCHEMA)

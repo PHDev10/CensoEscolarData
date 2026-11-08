@@ -9,7 +9,7 @@ CAMPOS_IGNORADOS_ESCRITA = ("ativo",)
 
 
 class RepositorioBase:
-    """Operações CRUD + exclusão lógica/física genéricas para uma tabela."""
+    """Operações CRUD + exclusão lógica e física genéricas para uma tabela."""
 
     tabela = ""
     pk = ""
@@ -17,7 +17,7 @@ class RepositorioBase:
     renomear = {}
 
     def _executar(self, sql, parametros=(), fetch="all"):
-        """Executa uma query parametrizada com log de erro e conexão segura."""
+        """Executa uma query parametrizada"""
         conexao = obter_conexao()
         try:
             cursor = conexao.execute(sql, parametros)
@@ -54,9 +54,7 @@ class RepositorioBase:
                 campos[coluna] = valor
         return campos
 
-
     def listar(self, page=None, limit=None):
-        """get by all: registros ativos (WHERE ativo = 1) com paginação opcional."""
         sql = f"SELECT * FROM {self.tabela} WHERE ativo = 1"
         if self.ordem_padrao:
             sql += f" ORDER BY {self.ordem_padrao}"
@@ -67,14 +65,12 @@ class RepositorioBase:
         return self._executar(sql)
 
     def contar_ativos(self):
-        """Total de registros ativos (usado no header X-Total-Count da paginação)."""
         linha = self._executar(
             f"SELECT COUNT(*) AS total FROM {self.tabela} WHERE ativo = 1", fetch="one"
         )
         return linha["total"] if linha else 0
 
     def obter(self, id_valor):
-        """get by id: retorna o registro ativo com a PK informada (ou None)."""
         return self._executar(
             f"SELECT * FROM {self.tabela} WHERE {self.pk} = ? AND ativo = 1",
             (id_valor,),
@@ -82,7 +78,6 @@ class RepositorioBase:
         )
 
     def existe_ativo(self, campo, valor):
-        """Verifica duplicidade considerando apenas registros ativos."""
         return (
             self._executar(
                 f"SELECT 1 FROM {self.tabela} WHERE {campo} = ? AND ativo = 1",
@@ -93,7 +88,6 @@ class RepositorioBase:
         )
 
     def inserir(self, dados):
-        """Insere um registro a partir do corpo (dict) da requisição."""
         colunas = self._colunas()
         campos = self._mapear_campos(dados, colunas, ignorar_pk=False)
         if not campos:
@@ -117,7 +111,6 @@ class RepositorioBase:
         return self.obter(campos[self.pk])
 
     def atualizar(self, id_valor, dados):
-        """Atualiza (merge parcial) apenas campos válidos de um registro ativo."""
         if self.obter(id_valor) is None:
             return None
         campos = self._mapear_campos(dados, self._colunas())
@@ -129,10 +122,6 @@ class RepositorioBase:
         return self.obter(id_valor)
 
     def remover(self, id_valor, tipo="logico"):
-        """Remove um registro por exclusão lógica (ativo = 0) ou física (DELETE).
-        Retorna a linha removida (pré-operação) ou None se não houver registro
-        compatível
-        """
         existente = self._executar(
             f"SELECT * FROM {self.tabela} WHERE {self.pk} = ?", (id_valor,), fetch="one"
         )
@@ -159,16 +148,12 @@ class RepositorioBase:
 
 
 class InstituicaoRepository(RepositorioBase):
-    """Repository da tabela 'instituicoes'"""
-
     tabela = "instituicoes"
     pk = "co_entidade"
     ordem_padrao = "co_entidade"
 
 
 class UsuarioRepository(RepositorioBase):
-    """Repository da tabela 'usuarios'"""
-
     tabela = "usuarios"
     pk = "id"
     ordem_padrao = "id"
@@ -181,7 +166,6 @@ class UsuarioRepository(RepositorioBase):
         return linha["proximo"]
 
     def id_ja_utilizado(self, id_valor):
-        """Verifica a PK entre TODOS os registros (ativos e inativos)"""
         return (
             self._executar(
                 f"SELECT 1 FROM {self.tabela} WHERE {self.pk} = ?",

@@ -5,6 +5,7 @@ import sqlite3
 from flask import Flask, jsonify, request
 
 from database import inicializar_banco
+from helpers.environment import FLASK_DEBUG, FLASK_PORT, LIMIT_MAXIMO_PAGINA
 from repository import InstituicaoRepository, UsuarioRepository
 from serializers import dump
 
@@ -29,8 +30,6 @@ SERIALIZACAO_USUARIO = {
 
 TIPOS_DELETES_VALIDOS = ("logico", "fisico")
 
-LIMIT_MAXIMO_PAGINA = 1000
-
 
 def _validar_tipo_delete(request_query):
     tipo = request_query.get("tipo", "logico")
@@ -40,10 +39,7 @@ def _validar_tipo_delete(request_query):
 
 
 def _ler_paginacao(qargs, limit_padrao=None):
-    """Retorna None quando nenhum parâmetro é enviado (retrocompatível com o
-    comportamento de lista completa) ou a tupla (page, limit) já validada.
-    Lança ValueError para parâmetros inválidos (a rota responde 400).
-    """
+    """Retorna None quando nenhum parâmetro é enviado  ou a tupla já validada."""
     raw_page = qargs.get("page")
     raw_limit = qargs.get("limit")
     if raw_page is None and raw_limit is None:
@@ -59,7 +55,9 @@ def _ler_paginacao(qargs, limit_padrao=None):
         raise ValueError("Os parâmetros 'page' e 'limit' devem ser números inteiros")
 
     if page < 1 or (limit is not None and limit < 1):
-        raise ValueError("Os parâmetros 'page' e 'limit' devem ser números inteiros positivos")
+        raise ValueError(
+            "Os parâmetros 'page' e 'limit' devem ser números inteiros positivos"
+        )
 
     if limit is not None:
         limit = min(limit, LIMIT_MAXIMO_PAGINA)
@@ -67,7 +65,7 @@ def _ler_paginacao(qargs, limit_padrao=None):
 
 
 def _resposta_lista(registros, serializacao, total=None):
-    """Serializa uma lista com dump(many=True) e expõe X-Total-Count quando houver."""
+    """Serializa uma lista com dump(many=True) e expõe X-Total-Count quando houver"""
     resposta = jsonify(dump(registros, many=True, **serializacao))
     if total is not None:
         resposta.headers["X-Total-Count"] = str(total)
@@ -80,7 +78,10 @@ def get_instituicoes():
     cod_busca = request.args.get("codigo")
     if cod_busca:
         if not cod_busca.isdigit():
-            return jsonify({"erro": "O parâmetro 'codigo' deve ser um número inteiro"}), 400
+            return (
+                jsonify({"erro": "O parâmetro 'codigo' deve ser um número inteiro"}),
+                400,
+            )
         instituicao = repo_instituicoes.obter(int(cod_busca))
         if instituicao is None:
             return jsonify({"erro": "Instituição de ensino não encontrada"}), 404
@@ -352,4 +353,4 @@ def erro_banco(_erro):
 
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    app.run(port=FLASK_PORT, debug=FLASK_DEBUG)
