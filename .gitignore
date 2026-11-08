@@ -1,4 +1,7 @@
 dados_censo_escolar/
 venv/
+.venv/
 __pycache__/
 resume.txt
+.env
+*.log
