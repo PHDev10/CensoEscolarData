@@ -17,18 +17,36 @@ O fluxo de uma requisição é **Controller → Service → Repository**:
 
 ## Instalação
 
+Requer Python 3.9 ou superior.
+
+Windows (PowerShell):
+
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
+Linux / macOS:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Se o `venv` falhar no Linux, instale o pacote `python3-venv` (Debian/Ubuntu).
+
 ## Variáveis de ambiente
 
 Crie o arquivo `.env` a partir do exemplo (o `.env` não é versionado):
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item .env.example .env     # Windows
+```
+
+```bash
+cp .env.example .env            # Linux / macOS
 ```
 
 | Variável | Descrição | Padrão |
@@ -44,9 +62,9 @@ Se a variável não existir no `.env`, vale o padrão da tabela.
 
 ## Execução
 
-```powershell
+```bash
 cd src
-python main.py
+python main.py      # no Linux, com o venv ativo, `python` também funciona
 ```
 
 A API sobe em `http://127.0.0.1:5000` (ou na porta definida em `FLASK_PORT`). Na primeira execução, se o banco estiver vazio, ele é criado e populado a partir dos JSONs.
@@ -72,7 +90,7 @@ Com `page` ou `limit`, a resposta traz o total de registros no header `X-Total-C
 
 Com a API rodando, em outro terminal:
 
-```powershell
+```bash
 python teste.py
 ```
 
