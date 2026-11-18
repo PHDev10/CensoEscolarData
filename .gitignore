@@ -1,4 +1,6 @@
+datasets/dados_censo_escolar/microdados_censo_escolar_2025_v2/
 dados_censo_escolar/
 __pycache__/
-censo_escolar.db
+.env
+.venv/
 venv/
